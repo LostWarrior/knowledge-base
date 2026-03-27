@@ -28,8 +28,12 @@ Optimized for both human browsing and AI agent context loading. `INDEX.md` provi
 ### Install
 
 ```bash
-# Homebrew tap
+# Install directly without tapping first
 brew install LostWarrior/knowledge-base/kb
+
+# Or tap first, then install by formula name
+brew tap LostWarrior/knowledge-base
+brew install kb
 
 # Or install the notarized macOS package from a GitHub release
 # https://github.com/LostWarrior/knowledge-base/releases
