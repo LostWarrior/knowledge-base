@@ -553,6 +553,74 @@ test_search_no_results() {
     }
 }
 
+test_search_json_returns_structured_results() {
+    local tmpdir="$1"
+    cd "$tmpdir"
+
+    $KB_BIN init test-vault
+    cd test-vault
+
+    $KB_BIN add "JSON Target" --status active --domain backend --tags "caching,performance"
+
+    local output
+    output=$($KB_BIN search --json --field domain --tier active --tags caching backend 2>&1)
+
+    echo "$output" | grep -q '^{' || {
+        echo "  FAIL: json output does not start with an object"
+        return 1
+    }
+    echo "$output" | grep -q '"count":1' || {
+        echo "  FAIL: json output does not report one result"
+        return 1
+    }
+    echo "$output" | grep -q '"id":"json-target"' || {
+        echo "  FAIL: json output missing result id"
+        return 1
+    }
+    echo "$output" | grep -q '"tier":"active"' || {
+        echo "  FAIL: json output missing tier"
+        return 1
+    }
+    echo "$output" | grep -q '"domain":"backend"' || {
+        echo "  FAIL: json output missing domain"
+        return 1
+    }
+    echo "$output" | grep -q '"path":"active/json-target.md"' || {
+        echo "  FAIL: json output missing path"
+        return 1
+    }
+    echo "$output" | grep -q '"tags":\["caching","performance"\]' || {
+        echo "  FAIL: json output missing tags"
+        return 1
+    }
+    if echo "$output" | grep -qi 'Found [0-9] result\|No results found'; then
+        echo "  FAIL: json mode should not print human-readable banners"
+        return 1
+    fi
+}
+
+test_search_json_handles_no_results() {
+    local tmpdir="$1"
+    cd "$tmpdir"
+
+    $KB_BIN init test-vault
+    cd test-vault
+
+    $KB_BIN add "Unrelated Entry" --status active --domain backend
+
+    local output
+    output=$($KB_BIN search --json "zzz-nonexistent-term-zzz" 2>&1)
+
+    echo "$output" | grep -q '"count":0' || {
+        echo "  FAIL: json no-result output did not report zero results"
+        return 1
+    }
+    echo "$output" | grep -q '"results":\[\]' || {
+        echo "  FAIL: json no-result output missing empty results array"
+        return 1
+    }
+}
+
 test_stale_identifies_overdue() {
     local tmpdir="$1"
     cd "$tmpdir"
@@ -1165,6 +1233,8 @@ run_test "move refreshes indexes"                 test_move_refreshes_indexes
 run_test "search finds by content"                 test_search_finds_by_content
 run_test "search finds by frontmatter"             test_search_finds_by_frontmatter
 run_test "search handles no results"               test_search_no_results
+run_test "search json returns structured results"  test_search_json_returns_structured_results
+run_test "search json handles no results"          test_search_json_handles_no_results
 run_test "stale identifies overdue entries"         test_stale_identifies_overdue
 run_test "stale ignores fresh entries"             test_stale_ignores_fresh
 run_test "doctor reports healthy vault"            test_doctor_reports_healthy

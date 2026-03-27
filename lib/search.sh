@@ -4,6 +4,8 @@
 
 # Tiers to search by default (archive excluded unless --archive)
 readonly SEARCH_DEFAULT_TIERS=(active reference learning tooling)
+readonly SEARCH_ALLOWED_TIERS=(active reference learning tooling archive)
+readonly SEARCH_JSON_SCHEMA_VERSION=1
 
 # ---------------------------------------------------------------------------
 # _search_get_fm_field <field> <file>
@@ -36,6 +38,84 @@ _search_get_tags() {
     raw="${raw%\]}"
     # Remove quotes and extra spaces
     printf '%s' "$raw" | sed 's/"//g;s/'\''//g;s/[[:space:]]*,[[:space:]]*/,/g;s/^[[:space:]]*//;s/[[:space:]]*$//'
+}
+
+# ---------------------------------------------------------------------------
+# _search_trim <string>
+#   Trims leading and trailing ASCII whitespace.
+# ---------------------------------------------------------------------------
+_search_trim() {
+    local value="$1"
+    value="${value#"${value%%[![:space:]]*}"}"
+    value="${value%"${value##*[![:space:]]}"}"
+    printf '%s' "$value"
+}
+
+# ---------------------------------------------------------------------------
+# _search_json_escape <string>
+#   Escapes a string for safe JSON embedding.
+# ---------------------------------------------------------------------------
+_search_json_escape() {
+    local str="$1"
+    str="${str//\\/\\\\}"
+    str="${str//\"/\\\"}"
+    str="${str//$'\n'/\\n}"
+    str="${str//$'\r'/}"
+    str="${str//$'\t'/\\t}"
+    printf '%s' "$str"
+}
+
+# ---------------------------------------------------------------------------
+# _search_json_array_from_csv <csv>
+#   Converts a comma-separated string to a JSON array literal.
+# ---------------------------------------------------------------------------
+_search_json_array_from_csv() {
+    local raw="$1"
+    raw="${raw#\[}"
+    raw="${raw%\]}"
+
+    if [[ -z "$raw" ]]; then
+        printf '[]'
+        return
+    fi
+
+    local first=1
+    local IFS=','
+    printf '['
+    local item
+    for item in $raw; do
+        item="$(_search_trim "$item")"
+        [[ -z "$item" ]] && continue
+        if [[ "$first" -eq 0 ]]; then
+            printf ','
+        fi
+        first=0
+        printf '"%s"' "$(_search_json_escape "$item")"
+    done
+    printf ']'
+}
+
+# ---------------------------------------------------------------------------
+# _search_valid_name <value>
+#   Validates names used for frontmatter fields and tier selection.
+# ---------------------------------------------------------------------------
+_search_valid_name() {
+    local value="$1"
+    [[ "$value" =~ ^[a-zA-Z0-9_][a-zA-Z0-9_-]*$ ]]
+}
+
+# ---------------------------------------------------------------------------
+# _search_allowed_tier <value>
+#   Returns 0 if the tier is one of the supported vault tiers.
+# ---------------------------------------------------------------------------
+_search_allowed_tier() {
+    local tier="$1"
+    case "$tier" in
+        active|reference|learning|tooling|archive)
+            return 0
+            ;;
+    esac
+    return 1
 }
 
 # ---------------------------------------------------------------------------
@@ -140,6 +220,7 @@ _highlight() {
 # kb_search <query> [OPTIONS]
 #   Search vault entries.
 #   Options:
+#     --json          Emit structured JSON output
 #     --field <field>   Search only in a specific frontmatter field
 #     --tier <tier>     Limit to a specific tier
 #     --archive         Include archive/ tier in search
@@ -156,10 +237,15 @@ kb_search() {
     local tier_filter=""
     local include_archive=0
     local tag_filter=""
+    local json_mode=0
 
     # Parse arguments
     while [[ $# -gt 0 ]]; do
         case "$1" in
+            --json)
+                json_mode=1
+                shift
+                ;;
             --field)
                 if [[ $# -lt 2 ]]; then
                     printf 'Error: --field requires a value\n' >&2
@@ -205,15 +291,29 @@ kb_search() {
     done
 
     if [[ -z "$query" ]]; then
-        printf 'Usage: kb search <query> [--field <field>] [--tier <tier>] [--archive] [--tags <tag>]\n' >&2
+        printf 'Usage: kb search <query> [--json] [--field <field>] [--tier <tier>] [--archive] [--tags <tag>]\n' >&2
         return 1
     fi
 
-    # Sanitize query - reject characters that could break grep
-    # Allow alphanumeric, spaces, hyphens, underscores, dots, and basic punctuation
-    if [[ "$query" =~ [^a-zA-Z0-9\ _.\-/,:@\#\+] ]]; then
-        printf 'Error: query contains unsupported characters\n' >&2
+    # Sanitize query - reject characters that could break grep or the shell.
+    # Allow alphanumeric, whitespace, and a small set of punctuation used in note titles.
+    case "$query" in
+        *[![:alnum:][:space:]._/,:@#+-]*)
+            printf 'Error: query contains unsupported characters\n' >&2
+            return 1
+            ;;
+    esac
+
+    if [[ -n "$field" ]] && ! _search_valid_name "$field"; then
+        printf 'Error: invalid field name: %s\n' "$field" >&2
         return 1
+    fi
+
+    if [[ -n "$tier_filter" ]]; then
+        if ! _search_allowed_tier "$tier_filter"; then
+            printf 'Error: invalid tier: %s\n' "$tier_filter" >&2
+            return 1
+        fi
     fi
 
     # Build tier list
@@ -228,7 +328,19 @@ kb_search() {
     fi
 
     # Search across tiers
-    local results=""
+    local -a result_ids=()
+    local -a result_titles=()
+    local -a result_tiers=()
+    local -a result_statuses=()
+    local -a result_types=()
+    local -a result_domains=()
+    local -a result_paths=()
+    local -a result_createds=()
+    local -a result_updateds=()
+    local -a result_summaries=()
+    local -a result_contexts=()
+    local -a result_tags=()
+    local -a result_match_scopes=()
     local match_count=0
 
     local tier
@@ -238,11 +350,13 @@ kb_search() {
 
         while IFS= read -r -d '' file; do
             local matched=0
+            local match_scope="content"
 
             # Field-specific search
             if [[ -n "$field" ]]; then
                 if _search_field_match "$query" "$field" "$file"; then
                     matched=1
+                    match_scope="field:${field}"
                 fi
             else
                 # Full content + frontmatter search (case-insensitive)
@@ -265,14 +379,42 @@ kb_search() {
             entry_id="$(_search_get_fm_field "id" "$file")"
             local entry_title
             entry_title="$(_search_get_fm_field "title" "$file")"
+            local entry_status
+            entry_status="$(_search_get_fm_field "status" "$file")"
+            local entry_type
+            entry_type="$(_search_get_fm_field "type" "$file")"
+            local entry_domain
+            entry_domain="$(_search_get_fm_field "domain" "$file")"
+            local entry_created
+            entry_created="$(_search_get_fm_field "created" "$file")"
+            local entry_updated
+            entry_updated="$(_search_get_fm_field "updated" "$file")"
+            local entry_summary
+            entry_summary="$(_search_get_fm_field "summary" "$file")"
+            local entry_tags
+            entry_tags="$(_search_get_tags "$file")"
             local context
             context="$(_search_match_context "$query" "$file")"
+            local entry_path
+            entry_path="${tier}/$(basename "$file")"
 
             if [[ -z "$entry_id" ]]; then
                 entry_id="$(basename "$file" .md)"
             fi
 
-            results="${results}${entry_id}|${entry_title}|${tier}|${context}"$'\n'
+            result_ids+=("$entry_id")
+            result_titles+=("$entry_title")
+            result_tiers+=("$tier")
+            result_statuses+=("$entry_status")
+            result_types+=("$entry_type")
+            result_domains+=("$entry_domain")
+            result_paths+=("$entry_path")
+            result_createds+=("$entry_created")
+            result_updateds+=("$entry_updated")
+            result_summaries+=("$entry_summary")
+            result_contexts+=("$context")
+            result_tags+=("$entry_tags")
+            result_match_scopes+=("$match_scope")
             match_count=$((match_count + 1))
         done < <(find "$tier_dir" -maxdepth 1 -name '*.md' -type f -print0 2>/dev/null)
     done
@@ -280,6 +422,34 @@ kb_search() {
     # ------------------------------------------------------------------
     # Output results
     # ------------------------------------------------------------------
+    if [[ "$json_mode" -eq 1 ]]; then
+        printf '{"schema_version":%d,"query":"%s","count":%d,"results":[' \
+            "$SEARCH_JSON_SCHEMA_VERSION" "$(_search_json_escape "$query")" "$match_count"
+
+        local i
+        for ((i = 0; i < match_count; i++)); do
+            if [[ "$i" -gt 0 ]]; then
+                printf ','
+            fi
+            printf '{"id":"%s","title":"%s","status":"%s","tier":"%s","type":"%s","domain":"%s","path":"%s","created":"%s","updated":"%s","summary":"%s","context":"%s","match_scope":"%s","tags":%s}' \
+                "$(_search_json_escape "${result_ids[$i]}")" \
+                "$(_search_json_escape "${result_titles[$i]}")" \
+                "$(_search_json_escape "${result_statuses[$i]}")" \
+                "$(_search_json_escape "${result_tiers[$i]}")" \
+                "$(_search_json_escape "${result_types[$i]}")" \
+                "$(_search_json_escape "${result_domains[$i]}")" \
+                "$(_search_json_escape "${result_paths[$i]}")" \
+                "$(_search_json_escape "${result_createds[$i]}")" \
+                "$(_search_json_escape "${result_updateds[$i]}")" \
+                "$(_search_json_escape "${result_summaries[$i]}")" \
+                "$(_search_json_escape "${result_contexts[$i]}")" \
+                "$(_search_json_escape "${result_match_scopes[$i]}")" \
+                "$(_search_json_array_from_csv "${result_tags[$i]}")"
+        done
+        printf ']}\n'
+        return 0
+    fi
+
     printf '\n'
 
     if [[ "$match_count" -eq 0 ]]; then
@@ -293,10 +463,15 @@ kb_search() {
     printf '%-20s %-30s %-10s %s\n' "ID" "Title" "Tier" "Context"
     printf '%-20s %-30s %-10s %s\n' "---" "-----" "----" "-------"
 
-    while IFS='|' read -r rid rtitle rtier rcontext; do
-        [[ -z "$rid" ]] && continue
+    local i
+    for ((i = 0; i < match_count; i++)); do
 
         # Truncate long values
+        local rid rtitle rtier rcontext
+        rid="${result_ids[$i]}"
+        rtitle="${result_titles[$i]}"
+        rtier="${result_tiers[$i]}"
+        rcontext="${result_contexts[$i]}"
         if [[ "${#rtitle}" -gt 28 ]]; then
             rtitle="${rtitle:0:25}..."
         fi
@@ -309,7 +484,7 @@ kb_search() {
         highlighted_ctx="$(_highlight "$rcontext" "$query")"
 
         printf '%-20s %-30s %-10s %s\n' "$rid" "$rtitle" "$rtier" "$highlighted_ctx"
-    done <<< "$results"
+    done
 
     printf '\n'
 }
