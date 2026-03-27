@@ -25,9 +25,9 @@ _json_escape() {
     printf '%s' "$str"
 }
 
-# Convert a comma-separated tags string (with optional brackets) to JSON array interior
+# Convert a comma-separated list string (with optional brackets) to JSON array interior.
 # e.g. "foo, bar, baz" -> "\"foo\",\"bar\",\"baz\""
-_manifest_tags() {
+_manifest_list() {
     local raw="$1"
     # Strip brackets if present
     raw="${raw#\[}"
@@ -46,10 +46,40 @@ _manifest_tags() {
             if [[ -n "$result" ]]; then
                 result="$result,"
             fi
-            result="$result\"$tag\""
+            result="$result\"$(_json_escape "$tag")\""
         fi
     done
     printf '%s' "$result"
+}
+
+# Build a manifest entry JSON object from parsed frontmatter values.
+_manifest_entry_json() {
+    local tier="$1"
+    local entry_id="$2"
+    local entry_title="$3"
+    local entry_status="$4"
+    local entry_type="$5"
+    local entry_domain="$6"
+    local entry_path="$7"
+    local entry_updated="$8"
+    local entry_tags="$9"
+    local entry_projects="${10}"
+    local entry_summary="${11}"
+
+    local j_tier j_id j_title j_status j_type j_domain j_path j_updated j_summary
+    j_tier="$(_json_escape "$tier")"
+    j_id="$(_json_escape "$entry_id")"
+    j_title="$(_json_escape "$entry_title")"
+    j_status="$(_json_escape "$entry_status")"
+    j_type="$(_json_escape "$entry_type")"
+    j_domain="$(_json_escape "$entry_domain")"
+    j_path="$(_json_escape "$entry_path")"
+    j_updated="$(_json_escape "$entry_updated")"
+    j_summary="$(_json_escape "$entry_summary")"
+
+    printf '{"id":"%s","tier":"%s","title":"%s","status":"%s","type":"%s","domain":"%s","path":"%s","updated":"%s","tags":[%s],"projects":[%s],"summary":"%s"}' \
+        "$j_id" "$j_tier" "$j_title" "$j_status" "$j_type" "$j_domain" "$j_path" "$j_updated" \
+        "$(_manifest_list "$entry_tags")" "$(_manifest_list "$entry_projects")" "$j_summary"
 }
 
 # Check if a file has valid frontmatter (starts with ---)
@@ -84,6 +114,8 @@ kb_index() {
     local manifest_file="$VAULT_ROOT/.kb/manifest.json"
     local timestamp
     timestamp="$(date '+%Y-%m-%d %H:%M')"
+    local generated_at
+    generated_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
     # Tiers to scan - archive is included for manifest but handled separately for INDEX.md
     local scan_tiers=( "active" "reference" "learning" "tooling" )
@@ -125,12 +157,13 @@ kb_index() {
                 continue
             fi
 
-            local entry_id entry_title entry_domain entry_updated entry_tags entry_status entry_type entry_summary
+            local entry_id entry_title entry_domain entry_updated entry_tags entry_projects entry_status entry_type entry_summary
             entry_id="$(_fm_field "id" "$mdfile")"
             entry_title="$(_fm_field "title" "$mdfile")"
             entry_domain="$(_fm_field "domain" "$mdfile")"
             entry_updated="$(_fm_field "updated" "$mdfile")"
             entry_tags="$(_fm_field "tags" "$mdfile")"
+            entry_projects="$(_fm_field "projects" "$mdfile")"
             entry_status="$(_fm_field "status" "$mdfile")"
             entry_type="$(_fm_field "type" "$mdfile")"
             entry_summary="$(_fm_field "summary" "$mdfile")"
@@ -152,6 +185,8 @@ kb_index() {
             # Clean up tags display: strip brackets for table
             entry_tags="${entry_tags#\[}"
             entry_tags="${entry_tags%\]}"
+            entry_projects="${entry_projects#\[}"
+            entry_projects="${entry_projects%\]}"
 
             # Write sort key (updated date) + table row
             printf '%s\t| %s | %s | %s | %s | %s |\n' \
@@ -162,19 +197,8 @@ kb_index() {
             # Write manifest entry (tier sort key + JSON object)
             local rel_path
             rel_path="${tier}/$(basename "$mdfile")"
-            local j_id j_title j_status j_type j_domain j_path j_updated j_tags j_summary
-            j_id="$(_json_escape "$entry_id")"
-            j_title="$(_json_escape "$entry_title")"
-            j_status="$(_json_escape "$entry_status")"
-            j_type="$(_json_escape "$entry_type")"
-            j_domain="$(_json_escape "$entry_domain")"
-            j_path="$(_json_escape "$rel_path")"
-            j_updated="$(_json_escape "$entry_updated")"
-            j_tags="$(_json_escape "$entry_tags")"
-            j_summary="$(_json_escape "$entry_summary")"
-            printf '%s\t{"id":"%s","title":"%s","status":"%s","type":"%s","domain":"%s","path":"%s","updated":"%s","tags":[%s],"summary":"%s"}\n' \
-                "$tier" "$j_id" "$j_title" "$j_status" "$j_type" "$j_domain" "$j_path" "$j_updated" \
-                "$(_manifest_tags "$j_tags")" "$j_summary" \
+            printf '%s\t%s\n' \
+                "$tier" "$(_manifest_entry_json "$tier" "$entry_id" "$entry_title" "$entry_status" "$entry_type" "$entry_domain" "$rel_path" "$entry_updated" "$entry_tags" "$entry_projects" "$entry_summary")" \
                 >> "$manifest_tmp"
 
             eval "count_${tier}=$(( $(eval "echo \$count_${tier}") + 1 ))"
@@ -188,12 +212,13 @@ kb_index() {
             [[ -f "$mdfile" ]] || continue
 
             if _has_frontmatter "$mdfile"; then
-                local entry_id entry_title entry_domain entry_updated entry_tags entry_status entry_type entry_summary
+                local entry_id entry_title entry_domain entry_updated entry_tags entry_projects entry_status entry_type entry_summary
                 entry_id="$(_fm_field "id" "$mdfile")"
                 entry_title="$(_fm_field "title" "$mdfile")"
                 entry_domain="$(_fm_field "domain" "$mdfile")"
                 entry_updated="$(_fm_field "updated" "$mdfile")"
                 entry_tags="$(_fm_field "tags" "$mdfile")"
+                entry_projects="$(_fm_field "projects" "$mdfile")"
                 entry_status="$(_fm_field "status" "$mdfile")"
                 entry_type="$(_fm_field "type" "$mdfile")"
                 entry_summary="$(_fm_field "summary" "$mdfile")"
@@ -205,22 +230,13 @@ kb_index() {
                 # Strip brackets from tags for manifest
                 entry_tags="${entry_tags#\[}"
                 entry_tags="${entry_tags%\]}"
+                entry_projects="${entry_projects#\[}"
+                entry_projects="${entry_projects%\]}"
 
                 local rel_path
                 rel_path="archive/$(basename "$mdfile")"
-                local j_id j_title j_status j_type j_domain j_path j_updated j_tags j_summary
-                j_id="$(_json_escape "$entry_id")"
-                j_title="$(_json_escape "$entry_title")"
-                j_status="$(_json_escape "${entry_status:-archived}")"
-                j_type="$(_json_escape "$entry_type")"
-                j_domain="$(_json_escape "$entry_domain")"
-                j_path="$(_json_escape "$rel_path")"
-                j_updated="$(_json_escape "$entry_updated")"
-                j_tags="$(_json_escape "$entry_tags")"
-                j_summary="$(_json_escape "$entry_summary")"
-                printf '%s\t{"id":"%s","title":"%s","status":"%s","type":"%s","domain":"%s","path":"%s","updated":"%s","tags":[%s],"summary":"%s"}\n' \
-                    "archive" "$j_id" "$j_title" "$j_status" "$j_type" "$j_domain" "$j_path" "$j_updated" \
-                    "$(_manifest_tags "$j_tags")" "$j_summary" \
+                printf '%s\t%s\n' \
+                    "archive" "$(_manifest_entry_json "archive" "$entry_id" "$entry_title" "${entry_status:-archived}" "$entry_type" "$entry_domain" "$rel_path" "$entry_updated" "$entry_tags" "$entry_projects" "$entry_summary")" \
                     >> "$manifest_tmp"
             fi
 
@@ -257,9 +273,12 @@ kb_index() {
         printf '_%d archived entries. Use `kb search` to find archived content._\n' "$archive_count"
     } > "$index_file"
 
-    # Build manifest.json sorted by tier order (active, reference, learning, tooling, archive)
+    # Build versioned manifest.json sorted by tier order (active, reference, learning, tooling, archive)
     {
-        printf '[\n'
+        printf '{\n'
+        printf '  "schema_version": 1,\n'
+        printf '  "generated_at": "%s",\n' "$generated_at"
+        printf '  "entries": [\n'
         local first_entry=1
         for tier in "${all_tiers[@]}"; do
             while IFS=$'\t' read -r _sort_key json_obj; do
@@ -271,7 +290,8 @@ kb_index() {
                 printf '  %s' "$json_obj"
             done < <(grep "^${tier}	" "$manifest_tmp" 2>/dev/null || true)
         done
-        printf '\n]\n'
+        printf '\n  ]\n'
+        printf '}\n'
     } > "$manifest_file"
 
     # Clean up

@@ -48,8 +48,16 @@ assert_contains() {
     grep -q "$2" "$1" || { echo "  FAIL: '$1' does not contain '$2'"; return 1; }
 }
 
+assert_contains_literal() {
+    grep -Fq -- "$2" "$1" || { echo "  FAIL: '$1' does not contain '$2'"; return 1; }
+}
+
 assert_not_contains() {
     ! grep -q "$2" "$1" || { echo "  FAIL: '$1' should not contain '$2'"; return 1; }
+}
+
+assert_not_contains_literal() {
+    ! grep -Fq -- "$2" "$1" || { echo "  FAIL: '$1' should not contain '$2'"; return 1; }
 }
 
 assert_exit_code() {
@@ -112,6 +120,35 @@ test_init_index_has_header() {
     $KB_BIN init test-vault
 
     assert_contains "$tmpdir/test-vault/INDEX.md" "# Knowledge Base Index"
+}
+
+test_init_manifest_has_versioned_shape() {
+    local tmpdir="$1"
+    cd "$tmpdir"
+
+    $KB_BIN init test-vault
+
+    local manifest="$tmpdir/test-vault/.kb/manifest.json"
+    assert_file_exists "$manifest"
+
+    jq -e '.schema_version == 1' "$manifest" >/dev/null
+    jq -e '(.generated_at | type == "string") and (.entries | type == "array") and (.entries | length == 0)' "$manifest" >/dev/null
+}
+
+test_init_claude_uses_entries_manifest_contract() {
+    local tmpdir="$1"
+    cd "$tmpdir"
+
+    $KB_BIN init test-vault
+
+    local claude="$tmpdir/test-vault/CLAUDE.md"
+    assert_file_exists "$claude"
+
+    assert_contains_literal "$claude" "jq '.entries[] | select(.tier == \"active\")' .kb/manifest.json"
+    assert_contains_literal "$claude" "jq '.entries[] | select(.domain == \"backend\")' .kb/manifest.json"
+    assert_contains_literal "$claude" "jq '.entries[] | select(.tags | index(\"api\"))' .kb/manifest.json"
+    assert_contains_literal "$claude" "jq -r '.entries[] | \"\\(.id)\\t\\(.title)\"' .kb/manifest.json"
+    assert_not_contains_literal "$claude" "jq '.[] | select(.status==\"active\")' .kb/manifest.json"
 }
 
 test_add_creates_entry() {
@@ -228,6 +265,27 @@ test_index_generates_catalog() {
     assert_contains "$tmpdir/test-vault/INDEX.md" "beta-entry"
     assert_contains "$tmpdir/test-vault/INDEX.md" "frontend"
     assert_contains "$tmpdir/test-vault/INDEX.md" "backend"
+}
+
+test_index_generates_versioned_manifest() {
+    local tmpdir="$1"
+    cd "$tmpdir"
+
+    $KB_BIN init test-vault
+    cd test-vault
+
+    $KB_BIN add "Manifest Contract Entry" --status active --domain backend --tags "api,docs"
+    $KB_BIN index
+
+    local manifest="$tmpdir/test-vault/.kb/manifest.json"
+    assert_file_exists "$manifest"
+
+    jq -e 'type == "object"' "$manifest" >/dev/null
+    jq -e '.schema_version == 1' "$manifest" >/dev/null
+    jq -e '(.generated_at | type == "string" and length > 0)' "$manifest" >/dev/null
+    jq -e '(.entries | type == "array" and length == 1)' "$manifest" >/dev/null
+    jq -e '(.entries[0].tier == "active") and (.entries[0].status == "active") and (.entries[0].path == "active/manifest-contract-entry.md")' "$manifest" >/dev/null
+    jq -e '(.entries[0] | has("tier")) and (.entries[0] | has("projects")) and (.entries[0] | has("summary"))' "$manifest" >/dev/null
 }
 
 test_index_reflects_all_tiers() {
@@ -974,6 +1032,8 @@ echo ""
 
 run_test "init creates correct structure"          test_init_creates_structure
 run_test "init INDEX.md has header"                test_init_index_has_header
+run_test "init manifest has versioned shape"       test_init_manifest_has_versioned_shape
+run_test "init CLAUDE uses manifest contract"      test_init_claude_uses_entries_manifest_contract
 run_test "add creates entry with frontmatter"      test_add_creates_entry
 run_test "add with tags"                           test_add_with_tags
 run_test "add to reference tier"                   test_add_reference_tier
@@ -981,6 +1041,7 @@ run_test "add rejects duplicate IDs"               test_add_rejects_duplicate_id
 run_test "add rejects path traversal"              test_add_rejects_path_traversal
 run_test "add rejects .. in ID"                    test_add_rejects_dotdot_in_id
 run_test "index generates catalog"                 test_index_generates_catalog
+run_test "index generates versioned manifest"      test_index_generates_versioned_manifest
 run_test "index reflects all tiers"                test_index_reflects_all_tiers
 run_test "validate catches missing frontmatter"    test_validate_catches_missing_frontmatter
 run_test "validate passes valid vault"             test_validate_passes_valid_vault

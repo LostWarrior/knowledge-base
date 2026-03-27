@@ -1,5 +1,6 @@
 # Knowledge Base - Agent Rules
 
+- The manifest is a top-level object with `schema_version`, `generated_at`, and `entries`
 - ALWAYS check `.kb/manifest.json` before reading any files in this vault
 - Use `jq` or `grep` on the manifest to find relevant entries by domain, tags, or status
 - Do NOT scan directories or read INDEX.md for navigation - the manifest is your source of truth
@@ -12,16 +13,16 @@
 
 ```bash
 # Find active entries
-jq '.[] | select(.status=="active")' .kb/manifest.json
+jq '.entries[] | select(.tier == "active")' .kb/manifest.json
 
 # Find entries by domain
-jq '.[] | select(.domain=="backend")' .kb/manifest.json
+jq '.entries[] | select(.domain == "backend")' .kb/manifest.json
 
 # Find entries by tag
-jq '.[] | select(.tags | index("api"))' .kb/manifest.json
+jq '.entries[] | select(.tags | index("api"))' .kb/manifest.json
 
-# Simple grep alternative (no jq needed)
-grep '"status":"active"' .kb/manifest.json
+# List entry IDs and titles
+jq -r '.entries[] | "\(.id)\t\(.title)"' .kb/manifest.json
 ```
 
 ## Entry Frontmatter Format
