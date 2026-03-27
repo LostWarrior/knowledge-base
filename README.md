@@ -126,11 +126,11 @@ distributed cache. Limits configured via environment variables.
 | `kb add <title> [--status S] [--domain D] [--tags T]` | Create a new entry with frontmatter in the correct tier |
 | `kb edit <id>` | Open an entry in `$EDITOR` |
 | `kb move <id> <tier>` | Move an entry between tiers and update its frontmatter |
-| `kb index` | Regenerate `INDEX.md` and `.kb/manifest.json` from all entries |
+| `kb index` | Regenerate `INDEX.md` and the versioned `.kb/manifest.json` contract from all entries |
 | `kb search <query> [--json]` | Search entries by content and frontmatter fields; `--json` emits structured results |
 | `kb validate` | Check all entries for valid frontmatter |
 | `kb stale` | List entries past their TTL |
-| `kb doctor` | Full vault health check (structure, index freshness, orphans) |
+| `kb doctor` | Full vault health check (structure, generated-artifact freshness, orphans) |
 | `kb status` | Summary of vault contents by tier and domain |
 | `kb compact <id>` | Deterministic concatenation and deduplication of an entry (no LLM) |
 | `kb distill <dir> [--keep] [--model M]` | LLM-powered summarization of session files (requires API key) |
@@ -190,22 +190,22 @@ This directory is a `kb` vault - a structured markdown knowledge base.
 
 ## For AI Agents
 
-1. Read `INDEX.md` first - it contains the full entry catalog (~150 tokens)
-2. Each entry has YAML frontmatter with: id, title, status, domain, tags, created, updated, ttl
-3. Entries are organized by lifecycle tier: active/, reference/, archive/
-4. To find entries: check INDEX.md or use `grep -r "domain: <name>" active/`
+1. Read `.kb/manifest.json` first - it is the source of truth for discovery
+2. The manifest is a top-level object with `schema_version`, `generated_at`, and `entries`
+3. Each manifest entry includes: `id`, `tier`, `title`, `status`, `type`, `domain`, `path`, `updated`, `tags`, `projects`, and `summary`
+4. Use `jq` to filter manifest entries before opening full markdown files
 5. Prefer reading active/ and reference/ entries - archive/ is historical only
 
 ## Quick Commands
 
-- View what exists: read INDEX.md
-- Find by domain: grep -r "domain: backend" active/ reference/
-- Find by tag: grep -r "tags:.*caching" active/ reference/
+- View what exists: `jq '.entries[] | {id, tier, title}' .kb/manifest.json`
+- Find by domain: `jq '.entries[] | select(.domain == "backend")' .kb/manifest.json`
+- Find by tag: `jq '.entries[] | select(.tags | index("caching"))' .kb/manifest.json`
 ```
 
 Agents that support `CLAUDE.md` (or equivalent instruction files) will automatically discover the vault and know how to navigate it efficiently.
 
-For programmatic agent access, `.kb/manifest.json` is the primary discovery mechanism. Instead of parsing a markdown table, agents can query the JSON manifest directly:
+For programmatic agent access, `.kb/manifest.json` is the primary discovery mechanism. It is a versioned top-level object with `schema_version`, `generated_at`, and `entries`. Instead of parsing a markdown table, agents can query the manifest directly:
 
 ```bash
 # Find all active entries in a domain
@@ -217,7 +217,7 @@ jq -r '.entries[] | "\(.id)\t\(.title)"' .kb/manifest.json
 
 This costs ~200 tokens for the relevant subset vs ~10k tokens to parse a large INDEX.md table. INDEX.md remains available for humans browsing in their editor or on GitHub.
 
-For direct structured retrieval during search, use `kb search --json "<query>"` and filter results on the fields you need without parsing the markdown output.
+For direct structured retrieval during search, use `kb search --json "<query>"` and filter results on the fields you need without parsing the human-readable search output.
 
 ## Comparison
 
