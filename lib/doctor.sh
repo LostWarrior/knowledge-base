@@ -2,6 +2,9 @@
 # lib/doctor.sh - Comprehensive health check for the kb vault
 # Requires: VAULT_ROOT, KB_ROOT (set by dispatcher)
 
+# shellcheck source=/dev/null
+source "${KB_ROOT}/lib/_vault_state.sh"
+
 # All expected tier directories
 readonly DOCTOR_TIERS=(active reference learning tooling archive)
 
@@ -150,54 +153,57 @@ _doctor_check_stale() {
 }
 
 # ---------------------------------------------------------------------------
-# _doctor_check_index
-#   Checks INDEX.md exists and is not older than the newest entry.
-#   Returns 0 if fresh, 1 if stale or missing.
+# _doctor_check_generated
+#   Checks INDEX.md and .kb/manifest.json exist and are not older than the
+#   newest entry.
 # ---------------------------------------------------------------------------
-_doctor_check_index() {
-    printf '\n[4/6] INDEX.md Freshness\n'
+_doctor_check_generated() {
+    printf '\n[4/6] Generated Artifact Freshness\n'
 
     local index_file="${VAULT_ROOT}/INDEX.md"
+    local manifest_file="${VAULT_ROOT}/.kb/manifest.json"
     local result=0
+    local newest_mtime newest_file
+    IFS=$'\t' read -r newest_mtime newest_file <<< "$(_kb_latest_entry_info)"
 
     if [[ ! -f "$index_file" ]]; then
         _doctor_fail "INDEX.md not found in vault root"
         printf "         Run 'kb index' to generate it.\n"
-        printf '1\n'
-        return
+        result=1
+    else
+        local index_mtime
+        index_mtime="$(_kb_stat_mtime "$index_file")"
+        if [[ -n "$index_mtime" ]] && [[ -n "$newest_mtime" ]] && [[ "$newest_mtime" -gt 0 ]]; then
+            if [[ "$index_mtime" -ge "$newest_mtime" ]]; then
+                _doctor_pass "INDEX.md is up to date"
+            else
+                _doctor_warn "INDEX.md is stale (newest entry: ${newest_file:-unknown})"
+                printf "         Run 'kb index' to rebuild.\n"
+                result=1
+            fi
+        else
+            _doctor_pass "INDEX.md exists (no entries to compare against)"
+        fi
     fi
 
-    # Get INDEX.md modification time
-    local index_mtime
-    index_mtime="$(stat -f '%m' "$index_file" 2>/dev/null || stat -c '%Y' "$index_file" 2>/dev/null)"
-
-    # Find newest .md file across tiers
-    local newest_mtime=0
-    local newest_file=""
-    local tier
-    for tier in "${DOCTOR_TIERS[@]}"; do
-        local tier_dir="${VAULT_ROOT}/${tier}"
-        [[ -d "$tier_dir" ]] || continue
-        while IFS= read -r -d '' f; do
-            local fmtime
-            fmtime="$(stat -f '%m' "$f" 2>/dev/null || stat -c '%Y' "$f" 2>/dev/null)"
-            if [[ -n "$fmtime" ]] && [[ "$fmtime" -gt "$newest_mtime" ]]; then
-                newest_mtime="$fmtime"
-                newest_file="${f#"${VAULT_ROOT}/"}"
-            fi
-        done < <(find "$tier_dir" -maxdepth 1 -name '*.md' -type f -print0 2>/dev/null)
-    done
-
-    if [[ -n "$index_mtime" ]] && [[ "$newest_mtime" -gt 0 ]]; then
-        if [[ "$index_mtime" -ge "$newest_mtime" ]]; then
-            _doctor_pass "INDEX.md is up to date"
-        else
-            _doctor_warn "INDEX.md is stale (newest entry: ${newest_file})"
-            printf "         Run 'kb index' to rebuild.\n"
-            result=1
-        fi
+    if [[ ! -f "$manifest_file" ]]; then
+        _doctor_fail ".kb/manifest.json not found in vault root"
+        printf "         Run 'kb index' to generate it.\n"
+        result=1
     else
-        _doctor_pass "INDEX.md exists (no entries to compare against)"
+        local manifest_mtime
+        manifest_mtime="$(_kb_stat_mtime "$manifest_file")"
+        if [[ -n "$manifest_mtime" ]] && [[ -n "$newest_mtime" ]] && [[ "$newest_mtime" -gt 0 ]]; then
+            if [[ "$manifest_mtime" -ge "$newest_mtime" ]]; then
+                _doctor_pass ".kb/manifest.json is up to date"
+            else
+                _doctor_warn ".kb/manifest.json is stale (newest entry: ${newest_file:-unknown})"
+                printf "         Run 'kb index' to rebuild.\n"
+                result=1
+            fi
+        else
+            _doctor_pass ".kb/manifest.json exists (no entries to compare against)"
+        fi
     fi
 
     printf '%d\n' "$result"
@@ -333,7 +339,7 @@ kb_doctor() {
     printf '%s\n' "$output" | sed '$d'
     stale_result="$(printf '%s\n' "$output" | tail -n 1)"
 
-    output="$(_doctor_check_index)"
+    output="$(_doctor_check_generated)"
     printf '%s\n' "$output" | sed '$d'
     index_result="$(printf '%s\n' "$output" | tail -n 1)"
 

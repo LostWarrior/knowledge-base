@@ -2,6 +2,9 @@
 # lib/move.sh - Move an entry between tiers
 # Requires: VAULT_ROOT
 
+# shellcheck source=/dev/null
+source "${KB_ROOT}/lib/_vault_state.sh"
+
 # Validate an ID matches the safe pattern
 _validate_id() {
     local id="$1"
@@ -111,11 +114,7 @@ kb_move() {
     rm -f "$source_file"
 
     printf 'Moved "%s" from %s/ to %s/ (status: %s)\n' "$id" "$source_tier" "$target_tier" "$new_status"
-
-    # Auto-run index if the function is available
-    if declare -f kb_index > /dev/null 2>&1; then
-        kb_index
-    fi
+    kb_refresh_indexes
 }
 
 if [[ "${BASH_SOURCE[0]:-}" == "${0:-}" ]]; then

@@ -60,6 +60,27 @@ assert_not_contains_literal() {
     ! grep -Fq -- "$2" "$1" || { echo "  FAIL: '$1' should not contain '$2'"; return 1; }
 }
 
+assert_manifest_contains() {
+    local vault_root="$1"
+    local needle="$2"
+    assert_contains "$vault_root/.kb/manifest.json" "$needle"
+}
+
+assert_index_section_contains() {
+    local index_file="$1"
+    local section="$2"
+    local needle="$3"
+    awk -v section="$section" -v needle="$needle" '
+        $0 == section { in_section=1; next }
+        /^## / && in_section { exit 1 }
+        in_section && index($0, needle) { found=1 }
+        END { exit(found ? 0 : 1) }
+    ' "$index_file" || {
+        echo "  FAIL: '$index_file' section '$section' does not contain '$needle'"
+        return 1
+    }
+}
+
 assert_exit_code() {
     local expected="$1"
     local actual="$2"
@@ -195,6 +216,75 @@ test_add_reference_tier() {
     local entry_file="$tmpdir/test-vault/reference/deployment-runbook.md"
     assert_file_exists "$entry_file"
     assert_contains "$entry_file" "status: reference"
+}
+
+test_add_refreshes_indexes() {
+    local tmpdir="$1"
+    cd "$tmpdir"
+
+    $KB_BIN init test-vault
+    cd test-vault
+
+    $KB_BIN add "Fresh Index Entry" --status active --domain backend
+
+    assert_manifest_contains "$tmpdir/test-vault" "\"id\":\"fresh-index-entry\""
+    assert_manifest_contains "$tmpdir/test-vault" "\"title\":\"Fresh Index Entry\""
+    assert_contains "$tmpdir/test-vault/INDEX.md" "fresh-index-entry"
+}
+
+test_add_edit_refreshes_after_editor() {
+    local tmpdir="$1"
+    cd "$tmpdir"
+
+    $KB_BIN init test-vault
+    cd test-vault
+
+    local editor_script="$tmpdir/editor.sh"
+    cat > "$editor_script" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+file="$1"
+sed -i.bak 's/^title: "Draft Title"$/title: "Final Title"/' "$file"
+rm -f "$file.bak"
+EOF
+    chmod +x "$editor_script"
+
+    EDITOR="$editor_script" $KB_BIN add "Draft Title" --status active --domain backend --edit
+
+    assert_manifest_contains "$tmpdir/test-vault" "\"title\":\"Final Title\""
+    assert_index_section_contains "$tmpdir/test-vault/INDEX.md" "## Active" "Final Title"
+}
+
+test_move_refreshes_indexes() {
+    local tmpdir="$1"
+    cd "$tmpdir"
+
+    $KB_BIN init test-vault
+    cd test-vault
+
+    cat > active/move-me.md <<'ENTRY'
+---
+id: move-me
+title: Move Me
+status: active
+type: analysis
+domain: backend
+projects: []
+created: 2026-03-27
+updated: 2026-03-27
+ttl: 90d
+tags: []
+summary: "Move me"
+---
+
+Entry body.
+ENTRY
+
+    $KB_BIN index
+    $KB_BIN move move-me reference
+
+    assert_manifest_contains "$tmpdir/test-vault" "\"status\":\"reference\""
+    assert_index_section_contains "$tmpdir/test-vault/INDEX.md" "## Reference" "Move Me"
 }
 
 test_add_rejects_duplicate_id() {
@@ -553,6 +643,28 @@ test_doctor_detects_stale_index() {
     # Doctor should warn about stale index or missing entry
     [[ "$exit_code" -ne 0 ]] || echo "$output" | grep -qi "stale\|outdated\|missing\|warning" || {
         echo "  FAIL: doctor did not detect stale INDEX.md"
+        return 1
+    }
+}
+
+test_doctor_detects_stale_manifest() {
+    local tmpdir="$1"
+    cd "$tmpdir"
+
+    $KB_BIN init test-vault
+    cd test-vault
+
+    $KB_BIN add "Manifest Freshness" --status active --domain backend
+    $KB_BIN index
+
+    touch -t 200001010000 .kb/manifest.json
+
+    local output
+    local exit_code=0
+    output=$($KB_BIN doctor 2>&1) || exit_code=$?
+
+    [[ "$exit_code" -ne 0 ]] || echo "$output" | grep -qi "manifest\|stale\|outdated\|warning" || {
+        echo "  FAIL: doctor did not detect stale manifest.json"
         return 1
     }
 }
@@ -1037,6 +1149,8 @@ run_test "init CLAUDE uses manifest contract"      test_init_claude_uses_entries
 run_test "add creates entry with frontmatter"      test_add_creates_entry
 run_test "add with tags"                           test_add_with_tags
 run_test "add to reference tier"                   test_add_reference_tier
+run_test "add refreshes indexes"                   test_add_refreshes_indexes
+run_test "add --edit refreshes after editor"       test_add_edit_refreshes_after_editor
 run_test "add rejects duplicate IDs"               test_add_rejects_duplicate_id
 run_test "add rejects path traversal"              test_add_rejects_path_traversal
 run_test "add rejects .. in ID"                    test_add_rejects_dotdot_in_id
@@ -1047,6 +1161,7 @@ run_test "validate catches missing frontmatter"    test_validate_catches_missing
 run_test "validate passes valid vault"             test_validate_passes_valid_vault
 run_test "move relocates entry"                    test_move_relocates_entry
 run_test "move to archive"                         test_move_to_archive
+run_test "move refreshes indexes"                 test_move_refreshes_indexes
 run_test "search finds by content"                 test_search_finds_by_content
 run_test "search finds by frontmatter"             test_search_finds_by_frontmatter
 run_test "search handles no results"               test_search_no_results
@@ -1054,6 +1169,7 @@ run_test "stale identifies overdue entries"         test_stale_identifies_overdu
 run_test "stale ignores fresh entries"             test_stale_ignores_fresh
 run_test "doctor reports healthy vault"            test_doctor_reports_healthy
 run_test "doctor detects stale index"              test_doctor_detects_stale_index
+run_test "doctor detects stale manifest"           test_doctor_detects_stale_manifest
 run_test "ID sanitization handles special chars"   test_id_sanitization
 
 echo ""

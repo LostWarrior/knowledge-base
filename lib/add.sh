@@ -2,6 +2,9 @@
 # lib/add.sh - Add a new entry to the kb vault
 # Requires: VAULT_ROOT, KB_ROOT
 
+# shellcheck source=/dev/null
+source "${KB_ROOT}/lib/_vault_state.sh"
+
 # Validate a path is safe (no path traversal)
 _validate_path() {
     local path="$1"
@@ -255,16 +258,13 @@ kb_add() {
 
     printf 'Created: %s\n' "$output_file"
 
-    # Auto-run index if the function is available
-    if declare -f kb_index > /dev/null 2>&1; then
-        kb_index
-    fi
-
     # Open in editor if requested
     if [[ "$open_editor" -eq 1 ]]; then
         local editor="${EDITOR:-vi}"
         "$editor" "$output_file"
     fi
+
+    kb_refresh_indexes
 }
 
 if [[ "${BASH_SOURCE[0]:-}" == "${0:-}" ]]; then
