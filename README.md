@@ -221,15 +221,15 @@ This costs ~200 tokens for the relevant subset vs ~10k tokens to parse a large I
 
 | Feature | kb | Beads | ReMe | Mem0 |
 |---------|-----|-------|------|------|
-| Dependencies | None (bash) | Python + schema runtime | Python | Python + vector DB |
-| Storage | Markdown files | Structured JSONL | Markdown files | External vector store |
+| Dependencies | None (bash) | Go CLI + Dolt backend | Python package + model/storage config | Python or Node OSS + model/vector-store config |
+| Storage | Markdown files | Dolt-backed SQL database | File-based summaries plus vector-based memory | Vector store + history store |
 | Agent-optimized | Yes (manifest.json, INDEX.md, CLAUDE.md) | Partial | No | Yes (API) |
-| Human-readable | Yes (plain markdown) | No (JSONL) | Yes | No (API only) |
-| Install complexity | `make install` | `pip install` + config | `pip install` | `pip install` + infra |
-| Git-friendly | Yes (diff-friendly text) | Partial | Yes | No |
+| Human-readable | Yes (plain markdown) | Partial | Partial | Mostly no |
+| Install complexity | `make install` | Homebrew/npm/Go/curl install | `pip install` + config | Python/Node SDK + config |
+| Git-friendly | Yes (diff-friendly text) | Partial | Partial | Limited |
 | Lifecycle tiers | Yes (active/reference/archive) | No | No | No |
-| TTL / staleness | Yes | No | Yes (compaction) | Yes (decay) |
-| Offline | Yes | Yes | Yes | No |
+| TTL / staleness | Yes | Partial | Partial | Partial |
+| Offline | Yes | Yes | Partial | Yes (OSS) |
 
 ## Contributing
 
