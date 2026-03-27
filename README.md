@@ -127,7 +127,7 @@ distributed cache. Limits configured via environment variables.
 | `kb edit <id>` | Open an entry in `$EDITOR` |
 | `kb move <id> <tier>` | Move an entry between tiers and update its frontmatter |
 | `kb index` | Regenerate `INDEX.md` and `.kb/manifest.json` from all entries |
-| `kb search <query>` | Search entries by content and frontmatter fields |
+| `kb search <query> [--json]` | Search entries by content and frontmatter fields; `--json` emits structured results |
 | `kb validate` | Check all entries for valid frontmatter |
 | `kb stale` | List entries past their TTL |
 | `kb doctor` | Full vault health check (structure, index freshness, orphans) |
@@ -216,6 +216,8 @@ jq -r '.entries[] | "\(.id)\t\(.title)"' .kb/manifest.json
 ```
 
 This costs ~200 tokens for the relevant subset vs ~10k tokens to parse a large INDEX.md table. INDEX.md remains available for humans browsing in their editor or on GitHub.
+
+For direct structured retrieval during search, use `kb search --json "<query>"` and filter results on the fields you need without parsing the markdown output.
 
 ## Comparison
 
