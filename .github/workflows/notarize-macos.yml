@@ -1,0 +1,154 @@
+name: Notarize macOS Installer
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+    secrets:
+      APPLE_API_KEY_ID:
+        required: true
+      APPLE_API_ISSUER_ID:
+        required: true
+      APPLE_API_PRIVATE_KEY:
+        required: true
+      APPLE_DEVELOPER_ID_INSTALLER_P12:
+        required: true
+      APPLE_DEVELOPER_ID_INSTALLER_P12_PASSWORD:
+        required: true
+
+jobs:
+  notarize:
+    name: Build And Notarize macOS Installer
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Mask notarization secrets in logs
+        env:
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+          APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+          APPLE_DEVELOPER_ID_INSTALLER_P12: ${{ secrets.APPLE_DEVELOPER_ID_INSTALLER_P12 }}
+          APPLE_DEVELOPER_ID_INSTALLER_P12_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_INSTALLER_P12_PASSWORD }}
+        run: |
+          set +x
+          printf '%s\n' \
+            "${APPLE_API_KEY_ID}" \
+            "${APPLE_API_ISSUER_ID}" \
+            "${APPLE_API_PRIVATE_KEY}" \
+            "${APPLE_DEVELOPER_ID_INSTALLER_P12}" \
+            "${APPLE_DEVELOPER_ID_INSTALLER_P12_PASSWORD}" | while IFS= read -r secret; do
+            [[ -n "${secret}" ]] && printf '::add-mask::%s\n' "${secret}"
+          done
+
+      - name: Validate notarization secrets
+        env:
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+          APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+          APPLE_DEVELOPER_ID_INSTALLER_P12: ${{ secrets.APPLE_DEVELOPER_ID_INSTALLER_P12 }}
+          APPLE_DEVELOPER_ID_INSTALLER_P12_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_INSTALLER_P12_PASSWORD }}
+        run: |
+          set +x
+          required=(
+            APPLE_API_KEY_ID
+            APPLE_API_ISSUER_ID
+            APPLE_API_PRIVATE_KEY
+            APPLE_DEVELOPER_ID_INSTALLER_P12
+            APPLE_DEVELOPER_ID_INSTALLER_P12_PASSWORD
+          )
+          for name in "${required[@]}"; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "Missing required GitHub secret: ${name}" >&2
+              exit 1
+            fi
+          done
+
+      - name: Import Developer ID Installer certificate
+        env:
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+          APPLE_DEVELOPER_ID_INSTALLER_P12: ${{ secrets.APPLE_DEVELOPER_ID_INSTALLER_P12 }}
+          APPLE_DEVELOPER_ID_INSTALLER_P12_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_INSTALLER_P12_PASSWORD }}
+        run: |
+          set +x
+          CERT_PATH="${RUNNER_TEMP}/developer-id-installer.p12"
+          KEYCHAIN_PATH="${RUNNER_TEMP}/build.keychain-db"
+          KEY_PATH="${RUNNER_TEMP}/AuthKey_${APPLE_API_KEY_ID}.p8"
+
+          echo -n "${APPLE_DEVELOPER_ID_INSTALLER_P12}" | base64 --decode > "${CERT_PATH}"
+          printf '%s' "${APPLE_API_PRIVATE_KEY}" > "${KEY_PATH}"
+
+          security create-keychain -p "" "${KEYCHAIN_PATH}"
+          security set-keychain-settings -lut 21600 "${KEYCHAIN_PATH}"
+          security unlock-keychain -p "" "${KEYCHAIN_PATH}"
+          security import "${CERT_PATH}" -P "${APPLE_DEVELOPER_ID_INSTALLER_P12_PASSWORD}" -A -t cert -f pkcs12 -k "${KEYCHAIN_PATH}"
+          security list-keychains -d user -s "${KEYCHAIN_PATH}"
+          security set-key-partition-list -S apple-tool:,apple:,codesign:,productsign: -s -k "" "${KEYCHAIN_PATH}"
+
+          INSTALLER_IDENTITY="$(
+            security find-identity -v -p basic "${KEYCHAIN_PATH}" | \
+              sed -n 's/.*"\(Developer ID Installer: [^"]*\)".*/\1/p' | \
+              head -n 1
+          )"
+          if [[ -z "${INSTALLER_IDENTITY}" ]]; then
+            echo "Unable to find imported Developer ID Installer identity" >&2
+            exit 1
+          fi
+
+          echo "KEYCHAIN_PATH=${KEYCHAIN_PATH}" >> "${GITHUB_ENV}"
+          echo "APPLE_API_KEY_PATH=${KEY_PATH}" >> "${GITHUB_ENV}"
+          echo "INSTALLER_IDENTITY=${INSTALLER_IDENTITY}" >> "${GITHUB_ENV}"
+
+      - name: Build installer package
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set +x
+          rootfs="${RUNNER_TEMP}/pkgroot"
+          pkg_unsigned="${RUNNER_TEMP}/kb-${VERSION}-unsigned.pkg"
+          pkg_signed="${RUNNER_TEMP}/kb-${VERSION}.pkg"
+
+          mkdir -p "${rootfs}"
+          make install PREFIX="${rootfs}/usr/local"
+          pkgbuild \
+            --root "${rootfs}" \
+            --identifier "io.github.lostwarrior.kb" \
+            --version "${VERSION}" \
+            --install-location "/" \
+            "${pkg_unsigned}"
+          productsign \
+            --sign "${INSTALLER_IDENTITY}" \
+            "${pkg_unsigned}" \
+            "${pkg_signed}"
+
+          echo "PKG_PATH=${pkg_signed}" >> "${GITHUB_ENV}"
+
+      - name: Notarize installer
+        env:
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: |
+          set +x
+          xcrun notarytool submit "${PKG_PATH}" \
+            --key "${APPLE_API_KEY_PATH}" \
+            --key-id "${APPLE_API_KEY_ID}" \
+            --issuer "${APPLE_API_ISSUER_ID}" \
+            --wait
+          xcrun stapler staple "${PKG_PATH}"
+
+      - name: Upload notarized installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: notarized-pkg
+          path: ${{ env.PKG_PATH }}
+
+      - name: Cleanup notarization material
+        if: ${{ always() }}
+        run: |
+          set +x
+          [[ -n "${APPLE_API_KEY_PATH:-}" ]] && rm -f "${APPLE_API_KEY_PATH}"
+          [[ -n "${KEYCHAIN_PATH:-}" ]] && security delete-keychain "${KEYCHAIN_PATH}" || true
+          rm -f "${RUNNER_TEMP}/developer-id-installer.p12"

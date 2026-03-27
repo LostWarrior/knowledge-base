@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  shellcheck:
+    name: ShellCheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ShellCheck
+        run: sudo apt-get install -y shellcheck
+
+      - name: Run ShellCheck on all scripts
+        run: shellcheck --exclude=SC2329,SC2317,SC2154,SC2034 bin/kb lib/*.sh tests/run_all.sh
+
+  tests:
+    name: Tests
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run test suite
+        run: SKIP_MIGRATE_TESTS=1 bash tests/run_all.sh
+
+  packaging:
+    name: Packaging
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build release tarball
+        run: |
+          chmod +x scripts/*.sh
+          version="$(sed -n 's/^KB_VERSION="\([^"]*\)"$/\1/p' bin/kb)"
+          ./scripts/build-release-tarball.sh dist
+          test -f "dist/kb-${version}.tar.gz"

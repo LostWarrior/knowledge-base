@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# kb pre-commit hook
+# Auto-regenerates INDEX.md and .kb/manifest.json when vault entries change.
+# Install: cp this file to .git/hooks/pre-commit (or use kb init --hooks)
+set -euo pipefail
+
+# Only run if we're inside a kb vault
+if [[ ! -f ".kb/kb.yaml" ]]; then
+    exit 0
+fi
+
+# Check if any .md files in tier directories are staged
+staged_md="$(git diff --cached --name-only --diff-filter=ACMR -- \
+    'active/*.md' 'reference/*.md' 'learning/*.md' 'tooling/*.md' 'archive/*.md' 2>/dev/null || true)"
+
+if [[ -z "$staged_md" ]]; then
+    exit 0
+fi
+
+# Check if kb is available
+if ! command -v kb >/dev/null 2>&1; then
+    echo "kb: pre-commit hook skipped (kb not in PATH)" >&2
+    exit 0
+fi
+
+echo "kb: regenerating INDEX.md and manifest.json..."
+kb index >/dev/null 2>&1
+
+# Stage the updated index files
+git add INDEX.md .kb/manifest.json 2>/dev/null || true

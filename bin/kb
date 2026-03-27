@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+KB_VERSION="0.1.0"
+
+# --- Detect KB_ROOT (where lib/ and templates/ live) ---
+_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -d "${_script_dir}/../lib" ]]; then
+    KB_ROOT="$(cd "${_script_dir}/.." && pwd)"
+else
+    KB_ROOT="/usr/local/share/kb"
+fi
+
+if [[ ! -d "${KB_ROOT}/lib" ]]; then
+    echo "error: cannot find kb installation (looked in ${KB_ROOT}/lib)" >&2
+    exit 1
+fi
+
+# --- Find vault root by walking up from cwd looking for .kb/kb.yaml ---
+find_vault_root() {
+    local dir
+    dir="$(pwd)"
+    while [[ "${dir}" != "/" ]]; do
+        if [[ -f "${dir}/.kb/kb.yaml" ]]; then
+            printf '%s' "${dir}"
+            return 0
+        fi
+        dir="$(dirname "${dir}")"
+    done
+    return 1
+}
+
+# --- Usage ---
+usage() {
+    cat <<USAGE
+kb - markdown knowledge base manager (v${KB_VERSION})
+
+Usage: kb <command> [options]
+
+Commands:
+  init       Create a new vault in the current directory
+  add        Add a new entry to the vault
+  index      Regenerate INDEX.md from all entries
+  status     Show vault status and entry counts
+  move       Move an entry between tiers
+  compact    Archive stale or expired entries
+  validate   Check all entries for frontmatter errors
+  search     Search entries by content or frontmatter
+  stale      List entries past their TTL
+  distill    Summarize directory contents with LLM
+  migrate    Import a markdown directory into this vault
+  doctor     Run diagnostics on the vault
+  help       Show this help message
+
+Environment:
+  KB_ROOT    Installation directory (auto-detected)
+
+USAGE
+}
+
+# --- Main dispatch ---
+command="${1:-}"
+
+if [[ -z "${command}" || "${command}" == "help" || "${command}" == "--help" || "${command}" == "-h" ]]; then
+    usage
+    exit 0
+fi
+
+# Validate command name: alphanumeric and hyphens only
+if [[ ! "${command}" =~ ^[a-zA-Z0-9-]+$ ]]; then
+    echo "error: invalid command name" >&2
+    exit 1
+fi
+
+# List of known commands
+case "${command}" in
+    init|add|index|status|move|compact|validate|search|stale|doctor|distill|migrate)
+        ;;
+    *)
+        echo "error: unknown command '${command}'" >&2
+        echo "Run 'kb help' for a list of commands." >&2
+        exit 1
+        ;;
+esac
+
+# For init, we don't require an existing vault
+if [[ "${command}" != "init" ]]; then
+    if ! VAULT_ROOT="$(find_vault_root)"; then
+        echo "error: not inside a kb vault (no .kb/kb.yaml found)" >&2
+        echo "Run 'kb init' to create a new vault." >&2
+        exit 1
+    fi
+    export VAULT_ROOT
+fi
+
+export KB_ROOT
+export KB_VERSION
+
+shift
+lib_script="${KB_ROOT}/lib/${command}.sh"
+
+if [[ ! -f "${lib_script}" ]]; then
+    echo "error: command script not found: ${lib_script}" >&2
+    exit 1
+fi
+
+exec bash "${lib_script}" "$@"
