@@ -2,19 +2,19 @@
 
 **Plain-text project context for you and your AI.**
 
-`kb` is a zero-dependency CLI for organizing markdown knowledge so it stays readable in your editor and efficient for AI tools.
+`kb` is a zero-dependency CLI for organizing project context in markdown so it stays readable in your editor and efficient for AI tools.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 ## TL;DR
 
-My markdown notes across projects turned into a tangled web of files. `kb` keeps them readable for humans, queryable for AI, and less like sending your agents on a `grep`-powered archaeological dig.
+My markdown notes across projects turned into a tangled web of files. `kb` keeps that context readable for humans, queryable by AI, and less like sending your agents on a `grep`-powered archaeological dig.
 
 ## Why This Exists
 
 This started with a simple workflow: keep useful context from ongoing projects in markdown. Notes, runbooks, decisions, analyses, and session logs all lived in one place, with enough structure to stay readable.
 
-Over time, that structure stopped being enough. Even with dates, `TL;DR`s, status fields, and pointers between files, the repository became harder to navigate than it should have been. The problem was not writing things down. The problem was finding the right context again later.
+Over time, that structure stopped being enough. Even with dates, `TL;DR`s, status fields, and pointers between files, the repository became harder to navigate than it should have been. The problem was not writing things down. The problem was finding the right context later.
 
 That friction showed up for me first. Finding the right context meant opening too many files, following too many links, and turning what was supposed to save time into a tangled web of markdown files. It slowed agents down too. They had to spend too many tokens scanning files just to figure out what was relevant before they could do any real work.
 
@@ -24,10 +24,10 @@ Existing tools solve parts of this well, but they often come with tradeoffs: mor
 
 ## The Solution
 
-`kb` turns a folder of markdown files into a structured knowledge base with two ways to navigate the same content.
+`kb` turns a folder of markdown files into a structured knowledge base with two ways to navigate the same content:
 
 1. `INDEX.md` for browsing and reading in your editor.
-2. `.kb/manifest.json` for AI agents filtering relevant context before opening files.
+2. `.kb/manifest.json` for AI agents to filter relevant context before opening files.
 
 Built with bash and standard unix tools, `kb` stays local, readable, and efficient.
 
