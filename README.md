@@ -1,27 +1,35 @@
 # kb
 
-A markdown knowledge base for humans and AI agents.
+**Plain-text project context for you and your AI.**
+
+`kb` is a zero-dependency CLI for organizing markdown knowledge so it stays readable in your editor and efficient for AI tools.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-## The Problem
+## TL;DR
 
-Knowledge accumulated across coding sessions - analyses, session notes, runbooks, architectural decisions - becomes unmanageable fast. Files proliferate across directories, indexes go stale within days, and AI coding agents waste hundreds of tokens navigating a sprawl of context files just to figure out what exists.
+My markdown notes across projects turned into a tangled web of files. `kb` keeps them readable for humans, queryable for AI, and less like sending your agents on a `grep`-powered archaeological dig.
 
-Existing solutions don't quite fit:
+## Why This Exists
 
-- **Beads** adds structured metadata but requires a specific runtime and schema setup
-- **Mem0** handles deduplication well but depends on external vector stores and APIs
-- **Letta** provides long-term memory for agents but brings heavyweight infrastructure
-- **ReMe** compacts markdown nicely but lacks lifecycle management
+This started with a simple workflow: keep useful context from ongoing projects in markdown. Notes, runbooks, decisions, analyses, and session logs all lived in one place, with enough structure to stay readable.
 
-Engineers need something that works with `git`, reads like plain text, and doesn't require installing a language runtime or standing up a service.
+Over time, that structure stopped being enough. Even with dates, `TL;DR`s, status fields, and pointers between files, the repository became harder to navigate than it should have been. The problem was not writing things down. The problem was finding the right context again later.
+
+That friction showed up for me first. Finding the right context meant opening too many files, following too many links, and turning what was supposed to save time into a tangled web of markdown files. It slowed agents down too. They had to spend too many tokens scanning files just to figure out what was relevant before they could do any real work.
+
+Existing tools solve parts of this well, but they often come with tradeoffs: more infrastructure than necessary, external systems, opinionated runtimes, or weak lifecycle management for the content itself.
+
+`kb` is simpler: plain text, local, git-friendly, and lightweight enough to fit into a normal development workflow. It keeps markdown-based context readable in a normal editor while giving AI tools a faster and more efficient way to navigate the same knowledge.
 
 ## The Solution
 
-`kb` is a zero-dependency CLI that manages a tiered, frontmatter-indexed markdown vault. It is built entirely with bash and standard unix tools - nothing to install, nothing to break.
+`kb` turns a folder of markdown files into a structured knowledge base with two ways to navigate the same content.
 
-Optimized for both human browsing and AI agent context loading. `INDEX.md` provides a human-readable catalog, while `.kb/manifest.json` gives agents a machine-readable index they can query with `jq` for just the entries they need.
+1. `INDEX.md` for browsing and reading in your editor.
+2. `.kb/manifest.json` for AI agents filtering relevant context before opening files.
+
+Built with bash and standard unix tools, `kb` stays local, readable, and efficient.
 
 ## Quick Start
 
