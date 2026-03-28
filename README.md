@@ -237,29 +237,6 @@ For direct structured retrieval during search, use `kb search --json "<query>"` 
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on submitting issues and pull requests.
 
-## Releases
-
-Tagged releases (`v*`) publish three assets:
-
-- `kb-<version>.tar.gz` for Homebrew
-- `SHA256SUMS.txt` for release verification
-- `kb-<version>.pkg` signed and notarized for macOS
-
-The Homebrew formula lives in [`Formula/kb.rb`](Formula/kb.rb) and is updated automatically by the release workflow after each tagged release.
-Apple signing and notarization are isolated in the reusable workflow at [`.github/workflows/notarize-macos.yml`](.github/workflows/notarize-macos.yml), so the main release workflow only passes version metadata and explicit GitHub secrets into that boundary.
-
-### GitHub Secrets For Notarization
-
-Add these repository secrets before cutting a release:
-
-- `APPLE_API_KEY_ID`
-- `APPLE_API_ISSUER_ID`
-- `APPLE_API_PRIVATE_KEY`
-- `APPLE_DEVELOPER_ID_INSTALLER_P12`
-- `APPLE_DEVELOPER_ID_INSTALLER_P12_PASSWORD`
-
-`APPLE_DEVELOPER_ID_INSTALLER_P12` should contain the base64-encoded Developer ID Installer certificate export. The workflow auto-detects the imported `Developer ID Installer: ...` identity, so no separate secret is needed for the certificate name. All signing and notarization credentials are read from GitHub Actions secrets, masked in workflow logs, and written only to temporary runner files that are deleted at the end of the notarization job.
-
 ## License
 
 [MIT](LICENSE)
