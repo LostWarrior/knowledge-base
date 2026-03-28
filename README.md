@@ -2,13 +2,9 @@
 
 **Plain-text project context for you and your AI.**
 
-`kb` is a zero-dependency CLI for organizing project context in markdown so it stays readable in your editor and efficient for AI tools.
-
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-
 ## TL;DR
 
-My markdown notes across projects turned into a tangled web of files. `kb` keeps that context readable for humans, queryable by AI, and less like sending your agents on a `grep`-powered archaeological dig.
+`kb` is a zero-dependency CLI for organizing project context in markdown so it stays readable in your editor and efficient for AI tools.
 
 ## Why This Exists
 
