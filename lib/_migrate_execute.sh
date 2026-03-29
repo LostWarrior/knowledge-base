@@ -42,20 +42,20 @@ _mig_execute() {
     # shellcheck disable=SC2064
     trap "rm -rf '$staging'" EXIT INT TERM
     local -a log_lines=()
+    local compact_project_list=""
     local processed=0
 
-    # Collect compact entries grouped by project_dir
+    # Collect compact project directories without relying on bash 4 associative arrays.
     local -a compact_projects=()
-    local -A compact_files=()
     while IFS=$'\t' read -r action _ _ _ _ _ _ _ _ _ _ _ proj _; do
         [[ "$action" != "compact" ]] && continue
-        if [[ -z "${compact_files[$proj]+_}" ]]; then
-            compact_projects+=("$proj")
-            compact_files["$proj"]=""
-        fi
-    done < "$plan_file"
-    while IFS=$'\t' read -r action rel_path _ _ _ _ _ _ _ _ _ _ proj _; do
-        [[ "$action" == "compact" ]] && compact_files["$proj"]+="${rel_path}"$'\n'
+        case "$compact_project_list" in
+            *$'\n'"$proj"$'\n'*) ;;
+            *)
+                compact_project_list+=$'\n'"$proj"$'\n'
+                compact_projects+=("$proj")
+                ;;
+        esac
     done < "$plan_file"
 
     # Process non-compact plan lines
@@ -88,62 +88,69 @@ _mig_execute() {
 
     # Process compact groups
     local proj_name
-    for proj_name in "${compact_projects[@]}"; do
-        local file_list="${compact_files[$proj_name]}" proj_dir="${source_dir}/${proj_name}"
+    if [[ "${#compact_projects[@]}" -gt 0 ]]; then
+        for proj_name in "${compact_projects[@]}"; do
+            local file_list="" proj_dir="${source_dir}/${proj_name}"
+            while IFS=$'\t' read -r action rel_path _ _ _ _ _ _ _ _ _ _ proj _; do
+                [[ "$action" == "compact" && "$proj" == "$proj_name" ]] || continue
+                file_list+="${rel_path}"$'\n'
+            done < "$plan_file"
+
         # Find master: QUICK-CONTEXT > README > first file
-        local master=""
-        for candidate in QUICK-CONTEXT.md README.md; do
-            [[ -f "${proj_dir}/${candidate}" ]] && master="${proj_name}/${candidate}" && break
-        done
-        [[ -z "$master" ]] && master="$(printf '%s' "$file_list" | head -1)"
-        # Get metadata from first compact entry
-        local c_tier="" c_tid="" c_title="" c_status="" c_type="" c_domain=""
-        local c_summary="" c_created="" c_updated="" c_tags=""
-        while IFS=$'\t' read -r action _ tier tid title status type domain summary created updated tags proj _; do
-            [[ "$action" == "compact" && "$proj" == "$proj_name" ]] || continue
-            c_tier="$tier"; c_title="$title"; c_status="$status"
-            c_type="$type"; c_domain="$domain"; c_summary="$summary"
-            c_created="$created"; c_updated="$updated"; c_tags="$tags"; break
-        done < "$plan_file"
-        # Use project folder name as the entry ID, not individual file titles
-        c_tid="$(_mig_title_to_id "$proj_name")"
-        c_title="$proj_name"
-        # Build compacted content: sections + ToC
-        local sections="" toc=""
-        if [[ -n "$master" ]]; then
-            local ms
-            ms="$(_mig_extract_sections "${source_dir}/${master}")"
-            [[ -n "$ms" ]] && sections="### From: $(basename "$master")"$'\n\n'"${ms}"$'\n\n'
-        fi
-        while IFS= read -r rel_f; do
-            [[ -z "$rel_f" ]] && continue
-            local bname
-            bname="$(basename "$rel_f")"
-            _mig_is_index_file "$bname" && continue
-            local extracted
-            extracted="$(_mig_extract_sections "${source_dir}/${rel_f}")"
-            if [[ -n "$extracted" ]]; then
-                sections+="### From: ${bname}"$'\n\n'"${extracted}"$'\n\n'
-            else
-                toc+="- ${bname}"$'\n'
+            local master=""
+            for candidate in QUICK-CONTEXT.md README.md; do
+                [[ -f "${proj_dir}/${candidate}" ]] && master="${proj_name}/${candidate}" && break
+            done
+            [[ -z "$master" ]] && master="$(printf '%s' "$file_list" | head -1)"
+            # Get metadata from first compact entry
+            local c_tier="" c_tid="" c_title="" c_status="" c_type="" c_domain=""
+            local c_summary="" c_created="" c_updated="" c_tags=""
+            while IFS=$'\t' read -r action _ tier tid title status type domain summary created updated tags proj _; do
+                [[ "$action" == "compact" && "$proj" == "$proj_name" ]] || continue
+                c_tier="$tier"; c_title="$title"; c_status="$status"
+                c_type="$type"; c_domain="$domain"; c_summary="$summary"
+                c_created="$created"; c_updated="$updated"; c_tags="$tags"; break
+            done < "$plan_file"
+            # Use project folder name as the entry ID, not individual file titles
+            c_tid="$(_mig_title_to_id "$proj_name")"
+            c_title="$proj_name"
+            # Build compacted content: sections + ToC
+            local sections="" toc=""
+            if [[ -n "$master" ]]; then
+                local ms
+                ms="$(_mig_extract_sections "${source_dir}/${master}")"
+                [[ -n "$ms" ]] && sections="### From: $(basename "$master")"$'\n\n'"${ms}"$'\n\n'
             fi
-        done <<< "$file_list"
-        local body=""
-        [[ -n "$toc" ]] && body="## Table of Contents"$'\n\n'"${toc}"$'\n'
-        [[ -n "$sections" ]] && body+="${sections}"
-        # Write compacted entry + archive originals
-        mkdir -p "${staging}/${c_tier}" "${staging}/archive/${proj_name}"
-        { _mig_generate_frontmatter "$c_title" "$c_tid" "$c_status" "$c_type" \
-              "$c_domain" "$c_summary" "$c_created" "$c_updated" "$c_tags"
-          printf '\n%s\n' "$body"; } > "${staging}/${c_tier}/${c_tid}.md"
-        for orig in "${proj_dir}"/*; do
-            [[ -f "$orig" ]] && cp "$orig" "${staging}/archive/${proj_name}/"
+            while IFS= read -r rel_f; do
+                [[ -z "$rel_f" ]] && continue
+                local bname
+                bname="$(basename "$rel_f")"
+                _mig_is_index_file "$bname" && continue
+                local extracted
+                extracted="$(_mig_extract_sections "${source_dir}/${rel_f}")"
+                if [[ -n "$extracted" ]]; then
+                    sections+="### From: ${bname}"$'\n\n'"${extracted}"$'\n\n'
+                else
+                    toc+="- ${bname}"$'\n'
+                fi
+            done <<< "$file_list"
+            local body=""
+            [[ -n "$toc" ]] && body="## Table of Contents"$'\n\n'"${toc}"$'\n'
+            [[ -n "$sections" ]] && body+="${sections}"
+            # Write compacted entry + archive originals
+            mkdir -p "${staging}/${c_tier}" "${staging}/archive/${proj_name}"
+            { _mig_generate_frontmatter "$c_title" "$c_tid" "$c_status" "$c_type" \
+                  "$c_domain" "$c_summary" "$c_created" "$c_updated" "$c_tags"
+              printf '\n%s\n' "$body"; } > "${staging}/${c_tier}/${c_tid}.md"
+            for orig in "${proj_dir}"/*; do
+                [[ -f "$orig" ]] && cp "$orig" "${staging}/archive/${proj_name}/"
+            done
+            _created "$proj_name/ -> $c_tier/$c_tid.md (compacted)"
+            _moved   "$proj_name/ -> archive/$proj_name/ (originals)"
+            log_lines+=("| $proj_name/ | compact | $c_tier/$c_tid.md | project compacted |")
+            processed=$((processed + 1))
         done
-        _created "$proj_name/ -> $c_tier/$c_tid.md (compacted)"
-        _moved   "$proj_name/ -> archive/$proj_name/ (originals)"
-        log_lines+=("| $proj_name/ | compact | $c_tier/$c_tid.md | project compacted |")
-        processed=$((processed + 1))
-    done
+    fi
 
     # Move staging into vault
     for tier_dir in "${staging}"/*; do
@@ -164,7 +171,9 @@ _mig_execute() {
     { printf '# Migration Log\n> Generated by kb migrate on %s\n> Source: %s\n\n' "$today" "$source_dir"
       printf '| Original Path | Action | Vault Path | Notes |\n'
       printf '|---------------|--------|------------|-------|\n'
-      for row in "${log_lines[@]}"; do printf '%s\n' "$row"; done
+      if [[ "${#log_lines[@]}" -gt 0 ]]; then
+          for row in "${log_lines[@]}"; do printf '%s\n' "$row"; done
+      fi
     } > "${vault_root}/MIGRATION-LOG.md"
 
     # shellcheck source=/dev/null
