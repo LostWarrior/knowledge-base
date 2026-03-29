@@ -67,7 +67,7 @@ kb_migrate() {
     # --- Phase 1: Scan ---
     local plan_file
     plan_file="$(mktemp)"
-    trap 'rm -f "$plan_file"' EXIT
+    trap "rm -f -- '$plan_file'" EXIT
 
     local counts
     counts="$(_mig_scan "$source_dir" "$VAULT_ROOT" "$plan_file" "$no_compact" "${excludes[@]+"${excludes[@]}"}")"

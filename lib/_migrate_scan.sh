@@ -5,7 +5,10 @@
 _mig_scan() {
     local source_dir="$1" vault_root="$2" plan_file="$3" no_compact="$4"
     shift 4
-    local -a excludes=("$@")
+    local -a excludes=()
+    if [[ "$#" -gt 0 ]]; then
+        excludes=("$@")
+    fi
 
     local total=0 n_migrate=0 n_compact=0 n_archive=0 n_skip=0 n_warn=0
 
@@ -29,10 +32,12 @@ _mig_scan() {
 
         # --- Check exclude patterns ---
         matched=false
-        for pat in "${excludes[@]}"; do
-            # shellcheck disable=SC2254
-            case "$rel_path" in $pat) matched=true; break ;; esac
-        done
+        if [[ "${#excludes[@]}" -gt 0 ]]; then
+            for pat in "${excludes[@]}"; do
+                # shellcheck disable=SC2254
+                case "$rel_path" in $pat) matched=true; break ;; esac
+            done
+        fi
         if [[ "$matched" == "true" ]]; then
             _skip "Excluded: $rel_path" >&2
             n_skip=$((n_skip + 1))
