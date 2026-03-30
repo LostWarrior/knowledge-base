@@ -32,7 +32,8 @@ Built with bash and standard unix tools, `kb` stays local, readable, and efficie
 ### Install
 
 ```bash
-# Install directly without tapping first
+# Install directly from the dedicated Homebrew tap:
+# https://github.com/LostWarrior/homebrew-knowledge-base
 brew install LostWarrior/knowledge-base/kb
 
 # Or tap first, then install by formula name

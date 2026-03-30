@@ -89,7 +89,7 @@ jobs:
             dist/kb-${{ needs.package.outputs.version }}.pkg
 
   update-homebrew-formula:
-    name: Update Homebrew Formula
+    name: Update Homebrew Tap
     runs-on: ubuntu-latest
     needs:
       - package
@@ -102,8 +102,32 @@ jobs:
       - name: Update formula for released version
         run: ./scripts/update-homebrew-formula.sh "${{ needs.package.outputs.version }}" "${{ needs.package.outputs.sha256 }}"
 
-      - name: Commit formula update
+      - name: Commit source formula update
         run: |
+          if git diff --quiet -- Formula/kb.rb; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/kb.rb
+          git commit -m "chore: update Homebrew formula for v${{ needs.package.outputs.version }}"
+          git push
+
+      - name: Check out Homebrew tap repo
+        uses: actions/checkout@v4
+        with:
+          repository: LostWarrior/homebrew-knowledge-base
+          path: homebrew-knowledge-base
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+
+      - name: Copy formula into Homebrew tap repo
+        run: |
+          mkdir -p homebrew-knowledge-base/Formula
+          cp Formula/kb.rb homebrew-knowledge-base/Formula/kb.rb
+
+      - name: Commit tap formula update
+        run: |
+          cd homebrew-knowledge-base
           if git diff --quiet -- Formula/kb.rb; then
             exit 0
           fi
