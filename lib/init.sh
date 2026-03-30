@@ -123,6 +123,7 @@ EOF
 - Always check `.kb/manifest.json` before reading any files in this vault
 - Do not scan directories or read INDEX.md for navigation; the manifest is the source of truth
 - Never delete entries - move them to archive/ instead
+- To remove the entire vault, use `kb destroy`
 - Keep frontmatter accurate (especially status and updated date)
 - Run kb index after manual edits to keep the index current
 

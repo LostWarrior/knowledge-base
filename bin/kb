@@ -66,6 +66,7 @@ Usage: kb <command> [options]
 
 Commands:
   init       Create a new vault in the current directory
+  destroy    Permanently delete a vault
   add        Add a new entry to the vault
   index      Regenerate INDEX.md from all entries
   status     Show vault status and entry counts
@@ -101,7 +102,7 @@ fi
 
 # List of known commands
 case "${command}" in
-    init|add|index|status|move|compact|validate|search|stale|doctor|distill|migrate)
+    init|destroy|add|index|status|move|compact|validate|search|stale|doctor|distill|migrate)
         ;;
     *)
         echo "error: unknown command '${command}'" >&2
@@ -110,14 +111,16 @@ case "${command}" in
         ;;
 esac
 
-# For init, we don't require an existing vault
+# For init, we don't require an existing vault. destroy can operate either on
+# the current vault or on an explicit path, so a missing VAULT_ROOT is allowed.
 if [[ "${command}" != "init" ]]; then
-    if ! VAULT_ROOT="$(find_vault_root)"; then
+    if VAULT_ROOT="$(find_vault_root)"; then
+        export VAULT_ROOT
+    elif [[ "${command}" != "destroy" ]]; then
         echo "error: not inside a kb vault (no .kb/kb.yaml found)" >&2
         echo "Run 'kb init' to create a new vault." >&2
         exit 1
     fi
-    export VAULT_ROOT
 fi
 
 export KB_ROOT

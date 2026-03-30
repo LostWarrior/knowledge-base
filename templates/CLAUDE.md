@@ -8,6 +8,7 @@
 - Entries in archive/ are cold storage - only read if explicitly asked
 - When creating or updating entries, always maintain YAML frontmatter
 - After changes, run `kb index` to regenerate both INDEX.md and manifest.json
+- To remove an entire vault, use `kb destroy`; do not delete individual entries
 
 ## Manifest Query Examples
 

@@ -45,6 +45,10 @@ assert_dir_exists() {
     [[ -d "$1" ]] || { echo "  FAIL: directory not found: $1"; return 1; }
 }
 
+assert_dir_not_exists() {
+    [[ ! -d "$1" ]] || { echo "  FAIL: directory should not exist: $1"; return 1; }
+}
+
 assert_contains() {
     grep -q "$2" "$1" || { echo "  FAIL: '$1' does not contain '$2'"; return 1; }
 }
@@ -197,6 +201,45 @@ test_init_claude_uses_entries_manifest_contract() {
     assert_contains_literal "$claude" "jq '.entries[] | select(.tags | index(\"api\"))' .kb/manifest.json"
     assert_contains_literal "$claude" "jq -r '.entries[] | \"\\(.id)\\t\\(.title)\"' .kb/manifest.json"
     assert_not_contains_literal "$claude" "jq '.[] | select(.status==\"active\")' .kb/manifest.json"
+}
+
+test_destroy_removes_current_vault() {
+    local tmpdir="$1"
+    cd "$tmpdir"
+
+    $KB_BIN init test-vault
+    cd test-vault
+
+    $KB_BIN destroy --yes
+    cd "$tmpdir"
+
+    assert_dir_not_exists "$tmpdir/test-vault"
+}
+
+test_destroy_accepts_explicit_vault_path() {
+    local tmpdir="$1"
+    cd "$tmpdir"
+
+    $KB_BIN init test-vault
+    $KB_BIN destroy "$tmpdir/test-vault" --yes
+
+    assert_dir_not_exists "$tmpdir/test-vault"
+}
+
+test_destroy_rejects_non_vault_directory() {
+    local tmpdir="$1"
+    mkdir -p "$tmpdir/not-a-vault"
+    cd "$tmpdir"
+
+    local output=""
+    local exit_code=0
+    output=$($KB_BIN destroy "$tmpdir/not-a-vault" --yes 2>&1) || exit_code=$?
+
+    assert_exit_code 1 "$exit_code"
+    echo "$output" | grep -q "Not a kb vault" || {
+        echo "  FAIL: destroy did not reject a non-vault path"
+        return 1
+    }
 }
 
 test_add_creates_entry() {
@@ -1242,6 +1285,9 @@ run_test "init INDEX.md has header"                test_init_index_has_header
 run_test "init manifest has versioned shape"       test_init_manifest_has_versioned_shape
 run_test "init works through symlinked install"    test_init_works_through_symlinked_install
 run_test "init CLAUDE uses manifest contract"      test_init_claude_uses_entries_manifest_contract
+run_test "destroy removes current vault"           test_destroy_removes_current_vault
+run_test "destroy accepts explicit vault path"     test_destroy_accepts_explicit_vault_path
+run_test "destroy rejects non-vault path"          test_destroy_rejects_non_vault_directory
 run_test "add creates entry with frontmatter"      test_add_creates_entry
 run_test "add with tags"                           test_add_with_tags
 run_test "add to reference tier"                   test_add_reference_tier
