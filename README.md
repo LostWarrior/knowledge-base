@@ -1,4 +1,4 @@
-# kb
+brew tap LostWarrior/knowledge-base# kb
 
 **Plain-text project context for you and your AI.**
 

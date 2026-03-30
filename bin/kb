@@ -4,9 +4,36 @@ set -euo pipefail
 KB_VERSION="0.1.0"
 
 # --- Detect KB_ROOT (where lib/ and templates/ live) ---
-_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [[ -d "${_script_dir}/../lib" ]]; then
-    KB_ROOT="$(cd "${_script_dir}/.." && pwd)"
+resolve_script_path() {
+    local source="${BASH_SOURCE[0]}"
+
+    if [[ "${source}" != */* ]]; then
+        source="$(command -v -- "${source}" || printf '%s' "${source}")"
+    fi
+
+    while [[ -L "${source}" ]]; do
+        local source_dir
+        source_dir="$(cd -P "$(dirname "${source}")" && pwd)"
+        source="$(readlink "${source}")"
+        if [[ "${source}" != /* ]]; then
+            source="${source_dir}/${source}"
+        fi
+    done
+
+    printf '%s\n' "${source}"
+}
+
+_script_path="$(resolve_script_path)"
+_script_dir="$(cd -P "$(dirname "${_script_path}")" && pwd)"
+
+if [[ -n "${KB_ROOT:-}" ]]; then
+    :
+elif [[ -d "${_script_dir}/../lib" ]]; then
+    KB_ROOT="$(cd -P "${_script_dir}/.." && pwd)"
+elif [[ -d "${_script_dir}/../share/kb/lib" ]]; then
+    KB_ROOT="$(cd -P "${_script_dir}/../share/kb" && pwd)"
+elif [[ -d "/opt/homebrew/share/kb/lib" ]]; then
+    KB_ROOT="/opt/homebrew/share/kb"
 else
     KB_ROOT="/usr/local/share/kb"
 fi
@@ -104,4 +131,4 @@ if [[ ! -f "${lib_script}" ]]; then
     exit 1
 fi
 
-exec bash "${lib_script}" "$@"
+exec "${BASH:-bash}" "${lib_script}" "$@"

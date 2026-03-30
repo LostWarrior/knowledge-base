@@ -156,6 +156,32 @@ test_init_manifest_has_versioned_shape() {
     jq -e '(.generated_at | type == "string") and (.entries | type == "array") and (.entries | length == 0)' "$manifest" >/dev/null
 }
 
+test_init_works_through_symlinked_install() {
+    local tmpdir="$1"
+    local cellar_root="$tmpdir/Cellar/kb/0.1.0"
+    local front_bin="$tmpdir/front-bin"
+
+    mkdir -p \
+        "$cellar_root/bin" \
+        "$cellar_root/share/kb/lib" \
+        "$cellar_root/share/kb/templates" \
+        "$cellar_root/share/kb/hooks" \
+        "$front_bin"
+
+    cp "$KB_BIN" "$cellar_root/bin/kb"
+    cp "$SCRIPT_DIR/../lib/"*.sh "$cellar_root/share/kb/lib/"
+    cp "$SCRIPT_DIR/../templates/"* "$cellar_root/share/kb/templates/"
+    cp "$SCRIPT_DIR/../hooks/"* "$cellar_root/share/kb/hooks/"
+    ln -s "$cellar_root/bin/kb" "$front_bin/kb"
+
+    cd "$tmpdir"
+    "$front_bin/kb" init test-vault >/dev/null
+
+    assert_dir_exists "$tmpdir/test-vault/.kb"
+    assert_file_exists "$tmpdir/test-vault/.kb/kb.yaml"
+    assert_file_exists "$tmpdir/test-vault/INDEX.md"
+}
+
 test_init_claude_uses_entries_manifest_contract() {
     local tmpdir="$1"
     cd "$tmpdir"
@@ -1213,6 +1239,7 @@ echo ""
 run_test "init creates correct structure"          test_init_creates_structure
 run_test "init INDEX.md has header"                test_init_index_has_header
 run_test "init manifest has versioned shape"       test_init_manifest_has_versioned_shape
+run_test "init works through symlinked install"    test_init_works_through_symlinked_install
 run_test "init CLAUDE uses manifest contract"      test_init_claude_uses_entries_manifest_contract
 run_test "add creates entry with frontmatter"      test_add_creates_entry
 run_test "add with tags"                           test_add_with_tags

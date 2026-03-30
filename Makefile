@@ -15,8 +15,6 @@ install:
 	@cp templates/* $(TPLDIR)/
 	@cp hooks/* $(HOOKDIR)/
 	@chmod +x $(HOOKDIR)/*
-	@sed -i '' "s|^KB_ROOT=.*|KB_ROOT=\"$(PREFIX)/share/kb\"|" $(BINDIR)/kb 2>/dev/null || \
-		sed -i "s|^KB_ROOT=.*|KB_ROOT=\"$(PREFIX)/share/kb\"|" $(BINDIR)/kb
 	@echo "Done. Run 'kb help' to get started."
 
 uninstall:
