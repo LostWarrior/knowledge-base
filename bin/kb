@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-KB_VERSION="0.1.0"
+KB_VERSION="0.1.1"
 
 # --- Detect KB_ROOT (where lib/ and templates/ live) ---
 resolve_script_path() {

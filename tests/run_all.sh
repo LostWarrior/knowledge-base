@@ -9,6 +9,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 KB_BIN="${SCRIPT_DIR}/../bin/kb"
+KB_VERSION="$(sed -n 's/^KB_VERSION="\([^"]*\)"$/\1/p' "$KB_BIN")"
 
 PASS_COUNT=0
 FAIL_COUNT=0
@@ -158,7 +159,7 @@ test_init_manifest_has_versioned_shape() {
 
 test_init_works_through_symlinked_install() {
     local tmpdir="$1"
-    local cellar_root="$tmpdir/Cellar/kb/0.1.0"
+    local cellar_root="$tmpdir/Cellar/kb/${KB_VERSION}"
     local front_bin="$tmpdir/front-bin"
 
     mkdir -p \
