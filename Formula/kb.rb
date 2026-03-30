@@ -1,8 +1,8 @@
 class Kb < Formula
   desc "Markdown knowledge base for humans and AI agents"
   homepage "https://github.com/LostWarrior/knowledge-base"
-  url "https://github.com/LostWarrior/knowledge-base/releases/download/v0.1.0/kb-0.1.0.tar.gz"
-  sha256 "917ba565767d62fb3d891bd667d376bdbe23ba551c1bd23e3bd4f5e928f6ffec"
+  url "https://github.com/LostWarrior/knowledge-base/releases/download/v0.1.1/kb-0.1.1.tar.gz"
+  sha256 "dbf34ec774d4345892b1bb55ae4e17d6732c1f6da23fb7ba5ab0b0ea491ccc84"
   license "MIT"
 
   depends_on "bash"
