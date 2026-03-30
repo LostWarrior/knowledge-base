@@ -240,7 +240,3 @@ For direct structured retrieval during search, use `kb search --json "<query>"` 
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on submitting issues and pull requests.
-
-## License
-
-[MIT](LICENSE)

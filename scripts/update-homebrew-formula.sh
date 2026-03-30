@@ -19,7 +19,7 @@ class Kb < Formula
   homepage "https://github.com/LostWarrior/knowledge-base"
   url "https://github.com/LostWarrior/knowledge-base/releases/download/v${version}/kb-${version}.tar.gz"
   sha256 "${sha256}"
-  license "MIT"
+  license "AGPL-3.0-only"
 
   depends_on "bash"
 
