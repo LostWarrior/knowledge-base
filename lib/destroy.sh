@@ -25,6 +25,25 @@ _destroy_count_entries() {
         -type f -name '*.md' 2>/dev/null | wc -l | tr -d ' '
 }
 
+_destroy_preview() {
+    local vault_root="$1"
+    local entry_count="$2"
+
+    _warn "This will permanently delete the entire vault directory."
+    _detail "Vault: ${vault_root}"
+    _detail "Markdown entries: ${entry_count}"
+    _detail "Top-level contents to remove:"
+
+    while IFS= read -r item; do
+        local label
+        label="$(basename "$item")"
+        if [[ -d "$item" ]]; then
+            label="${label}/"
+        fi
+        _detail "  - ${label}"
+    done < <(find "$vault_root" -mindepth 1 -maxdepth 1 | sort)
+}
+
 kb_destroy() {
     local target_arg=""
     local yes_flag="false"
@@ -83,9 +102,7 @@ kb_destroy() {
     vault_name="$(basename "$vault_root")"
     entry_count="$(_destroy_count_entries "$vault_root")"
 
-    _warn "This will permanently delete the entire vault directory."
-    _detail "Vault: ${vault_root}"
-    _detail "Markdown entries: ${entry_count}"
+    _destroy_preview "$vault_root" "$entry_count"
 
     if [[ "$current_dir" == "$vault_root" || "$current_dir" == "$vault_root/"* ]]; then
         _warn "Your shell is currently inside this vault."
@@ -93,13 +110,13 @@ kb_destroy() {
     fi
 
     if [[ "$yes_flag" != "true" ]]; then
-        printf '%s>>%s  Type %s to confirm deletion: ' "$_c_cyan" "$_c_reset" "$vault_name"
+        printf '%s>>%s  Type YES to delete this vault, or NO to cancel: ' "$_c_cyan" "$_c_reset"
         local answer
         if ! read -r answer < /dev/tty; then
             _skip "Deletion cancelled."
             return 0
         fi
-        if [[ "$answer" != "$vault_name" ]]; then
+        if [[ "$answer" != "YES" ]]; then
             _skip "Deletion cancelled."
             return 0
         fi

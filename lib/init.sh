@@ -12,10 +12,72 @@ _validate_path() {
     return 0
 }
 
+_init_show_plan() {
+    local target_dir="$1"
+    local force="$2"
+    local install_hooks="$3"
+
+    printf '>>  Vault initialization preview\n'
+    printf '   Target: %s\n' "$target_dir"
+    printf '   Will create or update:\n'
+    printf '     - .kb/\n'
+    printf '     - .kb/manifest.json\n'
+    printf '     - .kb/kb.yaml\n'
+    printf '     - active/\n'
+    printf '     - reference/\n'
+    printf '     - learning/\n'
+    printf '     - tooling/\n'
+    printf '     - archive/\n'
+    printf '     - INDEX.md\n'
+    printf '     - CLAUDE.md\n'
+    printf '     - .gitignore\n'
+
+    if [[ "$install_hooks" -eq 1 ]]; then
+        printf '     - .git/hooks/pre-commit (if .git/ exists)\n'
+    fi
+
+    if [[ "$force" -eq 1 ]]; then
+        printf '   Warning: existing generated vault files may be overwritten.\n'
+    fi
+}
+
+_init_confirm() {
+    local target_dir="$1"
+    local force="$2"
+    local install_hooks="$3"
+    local yes_flag="$4"
+
+    if [[ "$yes_flag" -eq 1 ]]; then
+        return 0
+    fi
+
+    if [[ ! -t 1 ]] || [[ ! -r /dev/tty ]]; then
+        return 0
+    fi
+
+    _init_show_plan "$target_dir" "$force" "$install_hooks"
+    printf '>>  Press Y to continue or N to cancel: '
+
+    local answer
+    if ! read -r answer < /dev/tty; then
+        printf 'Initialization cancelled.\n'
+        return 1
+    fi
+
+    case "$answer" in
+        Y|y) return 0 ;;
+        *)
+            printf 'Initialization cancelled.\n'
+            return 1
+            ;;
+    esac
+}
+
 kb_init() {
     local target_dir=""
     local force=0
     local install_hooks=0
+    local yes_flag=0
 
     # Parse arguments
     while [[ $# -gt 0 ]]; do
@@ -26,6 +88,10 @@ kb_init() {
                 ;;
             --hooks)
                 install_hooks=1
+                shift
+                ;;
+            --yes)
+                yes_flag=1
                 shift
                 ;;
             -*)
@@ -71,6 +137,8 @@ kb_init() {
         printf 'Error: KB_ROOT is not set\n' >&2
         return 1
     fi
+
+    _init_confirm "$target_dir" "$force" "$install_hooks" "$yes_flag" || return 0
 
     local today
     today="$(date +%Y-%m-%d)"

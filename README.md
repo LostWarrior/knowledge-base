@@ -126,8 +126,8 @@ distributed cache. Limits configured via environment variables.
 
 | Command | Description |
 |---------|-------------|
-| `kb init <name>` | Create a new vault with directory structure and config |
-| `kb destroy [<vault-dir>] [--yes]` | Permanently delete an entire vault after explicit confirmation |
+| `kb init [<name>] [--yes] [--hooks] [--force]` | Preview and create a vault in the target directory |
+| `kb destroy [<vault-dir>] [--yes]` | Preview and permanently delete an entire vault; interactive mode requires typing `YES` |
 | `kb add <title> [--status S] [--domain D] [--tags T]` | Create a new entry with frontmatter in the correct tier |
 | `kb edit <id>` | Open an entry in `$EDITOR` |
 | `kb move <id> <tier>` | Move an entry between tiers and update its frontmatter |
